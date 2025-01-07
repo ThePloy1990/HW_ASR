@@ -1,5 +1,5 @@
+import torch
 from torch import nn
-from torch.nn import Sequential
 
 
 class BaselineModel(nn.Module):
@@ -10,14 +10,13 @@ class BaselineModel(nn.Module):
     def __init__(self, n_feats, n_tokens, fc_hidden=512):
         """
         Args:
-            n_feats (int): number of input features.
-            n_tokens (int): number of tokens in the vocabulary.
-            fc_hidden (int): number of hidden features.
+            n_feats (int): number of input features (часто = 128).
+            n_tokens (int): размер словаря (включая blank).
+            fc_hidden (int): скрытый размер в полносвязном слое.
         """
         super().__init__()
 
-        self.net = Sequential(
-            # people say it can approximate any function...
+        self.net = nn.Sequential(
             nn.Linear(in_features=n_feats, out_features=fc_hidden),
             nn.ReLU(),
             nn.Linear(in_features=fc_hidden, out_features=fc_hidden),
@@ -27,43 +26,36 @@ class BaselineModel(nn.Module):
 
     def forward(self, spectrogram, spectrogram_length, **batch):
         """
-        Model forward method.
-
         Args:
-            spectrogram (Tensor): input spectrogram.
-            spectrogram_length (Tensor): spectrogram original lengths.
+            spectrogram: (B, T, n_feats) => (B, T, 128)
+            spectrogram_length: (B,) длины T
         Returns:
-            output (dict): output dict containing log_probs and
-                transformed lengths.
+            {
+                "log_probs": (B, T, n_tokens),
+                "log_probs_length": (B,) same as spectrogram_length
+            }
         """
-        output = self.net(spectrogram.transpose(1, 2))
+        # УБИРАЕМ transpose(1,2)!
+        # output = self.net(spectrogram.transpose(1, 2))
+        # Вместо этого подаём [B, T, n_feats]
+        output = self.net(spectrogram)  # => (B, T, fc_hidden)
+
         log_probs = nn.functional.log_softmax(output, dim=-1)
         log_probs_length = self.transform_input_lengths(spectrogram_length)
         return {"log_probs": log_probs, "log_probs_length": log_probs_length}
 
     def transform_input_lengths(self, input_lengths):
         """
-        As the network may compress the Time dimension, we need to know
-        what are the new temporal lengths after compression.
-
-        Args:
-            input_lengths (Tensor): old input lengths
-        Returns:
-            output_lengths (Tensor): new temporal lengths
+        We do not reduce the time dimension in MLP,
+        so the lengths remain the same.
         """
-        return input_lengths  # we don't reduce time dimension here
+        return input_lengths
 
     def __str__(self):
-        """
-        Model prints with the number of parameters.
-        """
-        all_parameters = sum([p.numel() for p in self.parameters()])
-        trainable_parameters = sum(
-            [p.numel() for p in self.parameters() if p.requires_grad]
-        )
+        all_params = sum(p.numel() for p in self.parameters())
+        train_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        s = super().__str__()
+        s += f"\nAll parameters: {all_params}"
+        s += f"\nTrainable parameters: {train_params}"
+        return s
 
-        result_info = super().__str__()
-        result_info = result_info + f"\nAll parameters: {all_parameters}"
-        result_info = result_info + f"\nTrainable parameters: {trainable_parameters}"
-
-        return result_info

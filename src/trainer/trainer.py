@@ -179,11 +179,3 @@ class Trainer(BaseTrainer):
         self.writer.add_table(
             "predictions", pd.DataFrame.from_dict(rows, orient="index")
         )
-
-    def _beam_search_stub(self, log_probs, beam_size=3):
-        # Аргмакс по последней оси
-        argmax_inds = log_probs.argmax(dim=-1).numpy()
-        # Декодируем "как будто" beam
-        pred_text = self.text_encoder.ctc_decode(argmax_inds)
-        # Для демонстрации просто добавим приставку
-        return pred_text + " (beam)"

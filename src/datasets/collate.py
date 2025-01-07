@@ -1,65 +1,48 @@
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-
 def collate_fn(dataset_items: list[dict]):
     """
     Collate и паддинг полей в dataset_items.
-    Превращает список отдельных примеров (sample) из датасета
-    в один батч.
-
-    dataset_items[i] обычно содержит поля:
-      {
-        "spectrogram": Tensor[time_i, freq] или [freq, time_i],
-        "text_encoded": Tensor[text_len_i],
-        ...
-      }
-
-    Returns:
-        batch (dict[Tensor]): словарь с собранным батчем:
-          {
-            "spectrogram": Tensor[batch_size, max_time, freq],
-            "spectrogram_length": Tensor[batch_size],
-            "text_encoded": Tensor[batch_size, max_text_len],
-            "text_encoded_length": Tensor[batch_size]
-          }
     """
-    # Извлекаем спектрограммы и их длины
+
+    # 1) Извлекаем все спектрограммы
     spectrograms = [item["spectrogram"] for item in dataset_items]
-    # Извлекаем закодированный текст и их длины
+
+    # 2) Извлекаем тексты
     texts_encoded = [item["text_encoded"] for item in dataset_items]
 
-    # Паддим спектрограммы
-    # Если у вас [time, freq], то используем pad_sequence(..., batch_first=True)
+    # 3) Извлекаем *сырые* тексты
+    texts = [item["text"] for item in dataset_items]
+
+    # >>> Извлекаем аудиопути
+    audio_paths = [item["audio_path"] for item in dataset_items]  # <<< добавлено для audio_path
+
+    # 4) Паддим спектрограммы
     spectrograms_padded = pad_sequence(
-        spectrograms,
-        batch_first=True,
-        padding_value=0.0
+        spectrograms, batch_first=True, padding_value=0.0
     )
 
-    # Паддим тексты
+    # 5) Паддим тексты
     texts_padded = pad_sequence(
-        texts_encoded,
-        batch_first=True,
-        padding_value=0
+        texts_encoded, batch_first=True, padding_value=0
     )
 
-    # Запоминаем реальные длины до паддинга
+    # 6) Длины
     spectrogram_lengths = torch.tensor(
-        [s.shape[0] for s in spectrograms],
-        dtype=torch.long
+        [s.shape[0] for s in spectrograms], dtype=torch.long
     )
     text_lengths = torch.tensor(
-        [t.shape[0] for t in texts_encoded],
-        dtype=torch.long
+        [t.shape[0] for t in texts_encoded], dtype=torch.long
     )
 
-    # Собираем батч в словарь
+    # 7) Собираем batch
     batch = {
-        "spectrogram": spectrograms_padded,  # [B, T, F]
-        "spectrogram_length": spectrogram_lengths,  # [B]
-        "text_encoded": texts_padded,  # [B, T_text]
-        "text_encoded_length": text_lengths,  # [B]
+        "spectrogram": spectrograms_padded,
+        "spectrogram_length": spectrogram_lengths,
+        "text_encoded": texts_padded,
+        "text_encoded_length": text_lengths,
+        "text": texts,                  # сырые тексты
+        "audio_path": audio_paths,      # <<< добавлено поле со списком путей
     }
-
     return batch

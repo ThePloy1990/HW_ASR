@@ -1,12 +1,26 @@
 train:
-  get_spectrogram: # special key for getting spectrogram
+  # Специальный ключ "get_spectrogram" — это та трансформация,
+  # которая будет вызвана у каждого аудио при создании спектра.
+  get_spectrogram:
     _target_: torchaudio.transforms.MelSpectrogram
     sample_rate: 16000
-  audio: # name of the tensor on which we apply transform
+    n_fft: 512
+    hop_length: 128
+    n_mels: 128
+
+  # "audio" — аугментации на аудиосигнал (до вычисления спектра)
+  audio:
     _target_: torchvision.transforms.v2.Compose
     transforms:
       - _target_: src.transforms.wav_augs.Gain
+        # здесь можно указать дополнительные параметры,
+        # например min_gain_in_db, max_gain_in_db и т.д.
+        # см. вашу реализацию Gain
+
 inference:
   get_spectrogram:
     _target_: torchaudio.transforms.MelSpectrogram
     sample_rate: 16000
+    n_fft: 512
+    hop_length: 128
+    n_mels: 128
