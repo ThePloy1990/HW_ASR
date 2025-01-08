@@ -1,0 +1,3 @@
+_target_: src.text_encoder.huggingface_lm.HuggingFaceLM
+model_name: "gpt2"
+use_lm: true

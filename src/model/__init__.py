@@ -1,5 +1,5 @@
-from src.model.baseline_model import BaselineModel
+from src.model.acoustic_model import AcousticModel
 
 __all__ = [
-    "BaselineModel",
+    "AcousticModel",
 ]
