@@ -142,7 +142,7 @@ class BaseDataset(Dataset):
         # 3) Транспонируем => [time, freq]
         spec = spec.transpose(0, 1)
 
-        print(f"[DEBUG] spectrogram shape = {spec.shape}")  # контрольный принт
+        # print(f"[DEBUG] spectrogram shape = {spec.shape}")  # контрольный принт
         return spec
 
     def preprocess_data(self, instance_data):

@@ -2,6 +2,8 @@ import re
 from string import ascii_lowercase
 import torch
 
+from .beam_search_decoder import BeamSearchDecoder
+
 class CTCTextEncoder:
     EMPTY_TOK = ""
 
@@ -20,6 +22,9 @@ class CTCTextEncoder:
 
         self.ind2char = dict(enumerate(self.vocab))
         self.char2ind = {v: k for k, v in self.ind2char.items()}
+
+        # Явно указываем индекс blank
+        self.blank_idx = 0
 
     def __len__(self):
         return len(self.vocab)
@@ -57,11 +62,7 @@ class CTCTextEncoder:
         """
         Greedy CTC-декодирование:
           - Удаляем blank-токен (индекс 0 = self.EMPTY_TOK).
-          - Сжимаем повторы подряд (чтобы "lllooo" стало "lo").
-        Args:
-            inds (Iterable[int]): последовательность индексов (например, argmax из CTC).
-        Returns:
-            decoded_text (str): итоговая строка.
+          - Сжимаем подряд идущие одинаковые символы (чтобы "lllooo" стало "lo").
         """
         decoded_chars = []
         prev_char = None
@@ -88,3 +89,24 @@ class CTCTextEncoder:
         text = text.lower()
         text = re.sub(r"[^a-z ]", "", text)
         return text
+
+
+    def beam_search_decode(
+        self,
+        log_probs: torch.Tensor,       # (B, T, vocab_size) – log_softmax
+        log_probs_length: torch.Tensor,# (B,) – длины T
+        beam_size=5,
+        cutoff_prob=1.0,
+        cutoff_top_n=40
+    ):
+        """
+        Запускает beam search на батче выходов CTC-модели (log_probs).
+        Возвращает список списков строк (до beam_size гипотез на каждый элемент батча).
+        """
+        decoder = BeamSearchDecoder(
+            text_encoder=self,
+            beam_size=beam_size,
+            cutoff_prob=cutoff_prob,
+            cutoff_top_n=cutoff_top_n
+        )
+        return decoder(log_probs, log_probs_length)

@@ -1,14 +1,18 @@
 defaults:
-  - model: baseline
+  - model: acoustic_model
+
   - writer: wandb
   - metrics: example
   - datasets: example
   - dataloader: example
   - transforms: example_only_instance
+  - lm: lm
   - _self_
+
 optimizer:
   _target_: torch.optim.AdamW
   lr: 3e-4
+
 lr_scheduler:
   _target_: torch.optim.lr_scheduler.OneCycleLR
   max_lr: 1e-2
@@ -16,20 +20,29 @@ lr_scheduler:
   steps_per_epoch: ${trainer.epoch_len}
   epochs: ${trainer.n_epochs}
   anneal_strategy: cos
+
 loss_function:
   _target_: src.loss.CTCLossWrapper
+
 text_encoder:
   _target_: src.text_encoder.CTCTextEncoder
+
 trainer:
+#  use_lm: true
   log_step: 50
-  n_epochs: 50
+  n_epochs: 10
   epoch_len: 200
-  device_tensors: ["spectrogram", "text_encoded"] # which tensors should be on device (ex. GPU)
-  resume_from: null # null or path to the checkpoint dir with *.pth and config.yaml
-  device: auto # device name or "auto"
-  override: True # if True, will override the previous run with the same name
-  monitor: "min val_WER_(Argmax)" # "off" or "max/min metric_name", i.e. our goal is to maximize/minimize metric
-  save_period: 5 # checkpoint each save_period epochs in addition to the best epoch
-  early_stop: ${trainer.n_epochs} # epochs for early stopping
+
+  device_tensors: ["spectrogram", "text_encoded"]
+  resume_from: null
+  device: auto
+  override: True
+  monitor: "min val_WER_(Argmax)"
+  save_period: 5
+  early_stop: ${trainer.n_epochs}
   save_dir: "saved"
   seed: 1
+
+  use_beam_search: true
+  beam_size: 5
+  lm_alpha: 0.5

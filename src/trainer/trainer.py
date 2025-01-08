@@ -17,20 +17,6 @@ class Trainer(BaseTrainer):
         """
         Run batch through the model, compute metrics, compute loss,
         and do training step (during training stage).
-
-        The function expects that criterion aggregates all losses
-        (if there are many) into a single one defined in the 'loss' key.
-
-        Args:
-            batch (dict): dict-based batch containing the data from
-                the dataloader.
-            metrics (MetricTracker): MetricTracker object that computes
-                and aggregates the metrics. The metrics depend on the type of
-                the partition (train or inference).
-        Returns:
-            batch (dict): dict-based batch containing the data from
-                the dataloader (possibly transformed via batch transform),
-                model outputs, and losses.
         """
         # 1) Переносим на девайс и применяем batch-трансформации
         batch = self.move_batch_to_device(batch)
@@ -46,14 +32,13 @@ class Trainer(BaseTrainer):
         outputs = self.model(**batch)
         batch.update(outputs)
 
-        # 4) Функция лосса. Предположим, она возвращает dict
-        #    с ключом "loss" (и при необходимости другими).
+        # 4) Лосс
         all_losses = self.criterion(**batch)
         batch.update(all_losses)
 
-        # 5) Если тренировка — делаем backward, клип градиентов, шаг оптимизатора
+        # 5) backward и шаг оптимизатора
         if self.is_train:
-            batch["loss"].backward()  # sum of all losses is always in batch["loss"]
+            batch["loss"].backward()
             self._clip_grad_norm()
             self.optimizer.step()
             if self.lr_scheduler is not None:
@@ -73,27 +58,16 @@ class Trainer(BaseTrainer):
         """
         Log data from batch. Calls self.writer.add_* to log data
         to the experiment tracker.
-
-        Args:
-            batch_idx (int): index of the current batch.
-            batch (dict): dict-based batch after going through
-                the 'process_batch' function.
-            mode (str): train or inference. Defines which logging
-                rules to apply.
         """
-        # Пример схемы логгирования
         if mode == "train":
-            # логируем раз в self.log_step шагов
             self.log_spectrogram(**batch)
         else:
-            # Для inference можно дополнительно логировать предсказания
             self.log_spectrogram(**batch)
             self.log_predictions(**batch)
 
     def log_spectrogram(self, spectrogram, **batch):
         """
         Пример логгирования спектрограммы первого элемента в батче.
-        Использует plot_spectrogram и self.writer.add_image.
         """
         spectrogram_for_plot = spectrogram[0].detach().cpu()
         image = plot_spectrogram(spectrogram_for_plot)
@@ -124,7 +98,6 @@ class Trainer(BaseTrainer):
             use_beam_search (bool): хотим ли мы использовать beam search.
             beam_size (int): размер бима при поиске.
         """
-
         # 1) greedy decode (argmax)
         argmax_inds = log_probs.cpu().argmax(dim=-1).numpy()
         argmax_inds = [
@@ -134,30 +107,34 @@ class Trainer(BaseTrainer):
         argmax_texts_raw = [self.text_encoder.decode(inds) for inds in argmax_inds]
         argmax_texts = [self.text_encoder.ctc_decode(inds) for inds in argmax_inds]
 
+        # 2) Beam search decode (если нужно)
         beam_search_texts = []
         if use_beam_search:
-            for i in range(log_probs.size(0)):
-                lp = log_probs[i, : log_probs_length[i]].detach().cpu()
-                beam_text = self._beam_search_stub(lp, beam_size)
-                beam_search_texts.append(beam_text)
+            beam_result = self.text_encoder.beam_search_decode(
+                log_probs,        # (B, T, vocab_size)
+                log_probs_length, # (B,)
+                beam_size=beam_size
+            )
+            # Возьмём первую гипотезу
+            for topk in beam_result:
+                if len(topk) > 0:
+                    beam_search_texts.append(topk[0])  # первый вариант
+                else:
+                    beam_search_texts.append("")
         else:
-            # Если beam search не используется
             beam_search_texts = ["" for _ in range(log_probs.size(0))]
 
         # 3) Собираем данные для логгирования
         tuples = list(zip(argmax_texts, argmax_texts_raw, beam_search_texts, text, audio_path))
 
-        # 4) Формируем табличку. Пример логгирования первых examples_to_log записей
+        # 4) Формируем табличку
         rows = {}
         for i, (pred_greedy, raw_pred, pred_beam, target, audio_p) in enumerate(tuples[:examples_to_log]):
-            # нормализуем target
             target_norm = self.text_encoder.normalize_text(target)
 
-            # считаем метрики для greedy
             wer_g = calc_wer(target_norm, pred_greedy) * 100
             cer_g = calc_cer(target_norm, pred_greedy) * 100
 
-            # если есть beam search
             if pred_beam:
                 wer_b = calc_wer(target_norm, pred_beam) * 100
                 cer_b = calc_cer(target_norm, pred_beam) * 100
@@ -175,7 +152,7 @@ class Trainer(BaseTrainer):
                 "beam_CER%": cer_b if cer_b is not None else "--",
             }
 
-        # 5) Логгируем табличку в writer
+        # 5) Логгируем табличку
         self.writer.add_table(
             "predictions", pd.DataFrame.from_dict(rows, orient="index")
         )
