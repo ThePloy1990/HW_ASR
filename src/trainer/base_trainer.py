@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 import torch
+import Path
 from numpy import inf
 from torch.nn.utils import clip_grad_norm_
 from tqdm.auto import tqdm
@@ -139,7 +140,14 @@ class BaseTrainer:
         )
 
         if config.trainer.get("resume_from") is not None:
-            resume_path = self.checkpoint_dir / config.trainer.resume_from
+            resume_cfg = Path(config.trainer.resume_from)
+            if resume_cfg.is_absolute():
+                # Если путь абсолютный, берём как есть
+                resume_path = resume_cfg
+            else:
+                # Если путь относительный, дополним до checkpoint_dir
+                resume_path = self.checkpoint_dir / resume_cfg
+
             self._resume_checkpoint(resume_path)
 
         if config.trainer.get("from_pretrained") is not None:
