@@ -1,6 +1,5 @@
 defaults:
   - model: acoustic_model
-
   - writer: wandb
   - metrics: example
   - datasets: example
@@ -11,11 +10,12 @@ defaults:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 3e-4
+  lr: 3e-4  # это базовый lr у AdamW, OneCycleLR сверху будет поднимать
 
+# ↓ Сниженный max_lr
 lr_scheduler:
   _target_: torch.optim.lr_scheduler.OneCycleLR
-  max_lr: 1e-2
+  max_lr: 1e-3          # было 1e-2, теперь 1e-3
   pct_start: 0.1
   steps_per_epoch: ${trainer.epoch_len}
   epochs: ${trainer.n_epochs}
@@ -28,10 +28,9 @@ text_encoder:
   _target_: src.text_encoder.CTCTextEncoder
 
 trainer:
-#  use_lm: true
-  log_step: 50
-  n_epochs: 10
-  epoch_len: 200
+  log_step: 100
+  n_epochs: 20
+  epoch_len: 2000
 
   device_tensors: ["spectrogram", "text_encoded"]
   resume_from: null
@@ -43,6 +42,10 @@ trainer:
   save_dir: "saved"
   seed: 1
 
+  # Beam + LM
   use_beam_search: true
   beam_size: 5
   lm_alpha: 0.5
+
+  # ↓ Новый параметр: gradient clipping
+  max_grad_norm: 5.0
