@@ -1,7 +1,7 @@
 from abc import abstractmethod
 
 import torch
-import Path
+from pathlib import Path
 from numpy import inf
 from torch.nn.utils import clip_grad_norm_
 from tqdm.auto import tqdm
